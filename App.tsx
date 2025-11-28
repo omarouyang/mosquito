@@ -4,15 +4,6 @@ import GameScene from './components/GameScene';
 import HUD from './components/HUD';
 import { useGameStore } from './store';
 
-// Added IntrinsicElements declaration to fix missing div type
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      div: any;
-    }
-  }
-}
-
 const App = () => {
   const phase = useGameStore(state => state.phase);
   

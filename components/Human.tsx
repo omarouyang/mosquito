@@ -7,28 +7,6 @@ import { useGameStore } from '../store';
 import { SUCK_DISTANCE, ENEMY_STATS, DETECTION_ANGLE, DETECTION_DISTANCE_MAX, DETECTION_RATE, DETECTION_DECAY, HEARING_DISTANCE, HUMAN_SENSITIVITY_DISTANCE } from '../constants';
 import { EnemyType } from '../types';
 
-// Fix for R3F types not being picked up in this environment
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      group: any;
-      mesh: any;
-      meshBasicMaterial: any;
-      meshStandardMaterial: any;
-      pointLight: any;
-      ambientLight: any;
-      spotLight: any;
-      fog: any;
-      color: any;
-      torusGeometry: any;
-      ringGeometry: any;
-      sphereGeometry: any;
-      // Added div for Html component usage
-      div: any;
-    }
-  }
-}
-
 // --- Visual Components for Detail ---
 
 const Eyes = () => (

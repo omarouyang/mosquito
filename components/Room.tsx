@@ -4,24 +4,6 @@ import { Box, Cylinder, Sphere, Torus, Cone } from '@react-three/drei';
 import { useGameStore } from '../store';
 import { LevelType } from '../types';
 
-// Fix for R3F types not being picked up in this environment
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      group: any;
-      mesh: any;
-      meshBasicMaterial: any;
-      meshStandardMaterial: any;
-      pointLight: any;
-      ambientLight: any;
-      spotLight: any;
-      fog: any;
-      color: any;
-      torusGeometry: any;
-    }
-  }
-}
-
 // --- Reusable Props & Furniture Parts ---
 
 const TableLeg = ({ position, height = 2, color = "#3e2723" }: { position: [number, number, number], height?: number, color?: string }) => (

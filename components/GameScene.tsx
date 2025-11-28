@@ -8,24 +8,6 @@ import PlayerController from './PlayerController';
 import { useGameStore } from '../store';
 import { GamePhase } from '../types';
 
-// Fix for R3F types not being picked up in this environment
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      group: any;
-      mesh: any;
-      meshBasicMaterial: any;
-      meshStandardMaterial: any;
-      pointLight: any;
-      ambientLight: any;
-      spotLight: any;
-      fog: any;
-      color: any;
-      torusGeometry: any;
-    }
-  }
-}
-
 const GameLogic = () => {
     const tickTime = useGameStore(state => state.tickTime);
     

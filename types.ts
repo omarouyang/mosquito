@@ -80,25 +80,45 @@ export interface GameState {
 declare global {
   namespace JSX {
     interface IntrinsicElements {
+      // Three.js elements
       group: any;
       mesh: any;
+      scene: any;
       meshBasicMaterial: any;
       meshStandardMaterial: any;
+      meshPhongMaterial: any;
       pointLight: any;
       ambientLight: any;
       spotLight: any;
+      directionalLight: any;
       fog: any;
       color: any;
+      
+      // Geometries
+      boxGeometry: any;
+      sphereGeometry: any;
+      cylinderGeometry: any;
       torusGeometry: any;
       ringGeometry: any;
-      sphereGeometry: any;
+      planeGeometry: any;
+      coneGeometry: any;
+      circleGeometry: any;
+      
+      // HTML elements
       div: any;
+      span: any;
       h1: any;
       h2: any;
       h3: any;
       p: any;
       button: any;
-      span: any;
+      input: any;
+      label: any;
+      form: any;
+      ul: any;
+      li: any;
+      a: any;
+      img: any;
     }
   }
 }

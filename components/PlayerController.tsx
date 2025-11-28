@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
@@ -22,9 +23,6 @@ const PlayerController = () => {
   const moveUp = useRef(false);
   const moveDown = useRef(false);
 
-  // --- Mobile Input Handling ---
-  // We read directly from store in loop to avoid subscriptions
-  
   // --- Collision & Feedback Refs ---
   const raycaster = useRef(new THREE.Raycaster());
   const lastCollisionTime = useRef(0);
@@ -48,8 +46,12 @@ const PlayerController = () => {
   });
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
 
-  // Initialize Audio
+  // Initialize Audio & Camera Setup
   useEffect(() => {
+    // Force camera order and up vector to prevent gimbal lock or flipping
+    camera.rotation.order = 'YXZ';
+    camera.up.set(0, 1, 0);
+
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContext) return;
@@ -92,7 +94,7 @@ const PlayerController = () => {
         audioCtxRef.current.close();
       }
     };
-  }, []);
+  }, [camera]);
 
   const playCollisionSound = () => {
     const ctx = audioCtxRef.current;
@@ -237,6 +239,8 @@ const PlayerController = () => {
 
                 // Clamp Pitch
                 euler.current.x = Math.max(0.1, Math.min(Math.PI - 0.1, euler.current.x));
+                // Clamp Roll explicitly to 0
+                euler.current.z = 0;
 
                 camera.quaternion.setFromEuler(euler.current);
                 break;
@@ -336,61 +340,73 @@ const PlayerController = () => {
         audioCtxRef.current.resume();
     }
 
-    // --- Input Processing ---
-    const velocity = new THREE.Vector3();
     const { mobileInput } = useGameStore.getState();
-
-    // 1. Keyboard
-    if (moveForward.current) velocity.z -= 1;
-    if (moveBackward.current) velocity.z += 1;
-    if (moveLeft.current) velocity.x -= 1;
-    if (moveRight.current) velocity.x += 1;
-    if (moveUp.current) velocity.y += 1;
-    if (moveDown.current) velocity.y -= 1;
-
-    // 2. Mobile Joystick
-    velocity.x += mobileInput.move.x;
-    velocity.z += mobileInput.move.y; // Joystick Y maps to Z (forward/back)
-    velocity.y += mobileInput.vertical;
-
-    const isMoving = velocity.lengthSq() > 0;
-
     let currentSpeed = MOVEMENT_SPEED;
     if (skillSpeed.isActive) {
         currentSpeed *= SKILL_SPEED_MULTIPLIER;
     }
 
-    // Apply movement relative to camera direction
-    velocity.normalize().multiplyScalar(currentSpeed * delta);
+    // --- Input Vectors ---
+    // Calculate movement vector
+    // X and Z are local to camera (Forward/Strafe)
+    // Y is Global (Up/Down) for better Mosquito hovering control
     
+    // 1. Calculate Local Horizontal Plane Input (Forward/Strafe)
+    const localInputX = (moveRight.current ? 1 : 0) - (moveLeft.current ? 1 : 0) + mobileInput.move.x;
+    const localInputZ = (moveBackward.current ? 1 : 0) - (moveForward.current ? 1 : 0) + mobileInput.move.y;
+    
+    // 2. Calculate Global Vertical Input (Up/Down)
+    const globalInputY = (moveUp.current ? 1 : 0) - (moveDown.current ? 1 : 0) + mobileInput.vertical;
+
+    // Normalize combined intent if we were treating them equally, 
+    // but for 3D navigation separating vert is often better feeling.
+    // Let's normalize just the horizontal plane for movement speed consistency
+    // and handle vertical independently or combined.
+    
+    const moveVector = new THREE.Vector3(localInputX, globalInputY, localInputZ);
+    if (moveVector.lengthSq() > 1) {
+        moveVector.normalize();
+    }
+    
+    // Scale by speed
+    moveVector.multiplyScalar(currentSpeed * delta);
+
+    // Apply Local Horizontal Movement
+    if (moveVector.x !== 0 || moveVector.z !== 0) {
+        // We want to move Forward/Right relative to camera view
+        camera.translateX(moveVector.x);
+        camera.translateZ(moveVector.z);
+    }
+    
+    // Apply Global Vertical Movement
+    if (moveVector.y !== 0) {
+        camera.position.y += moveVector.y;
+    }
+    
+    const isMoving = moveVector.lengthSq() > 0;
+
     // --- Collision Detection ---
     let collisionOccurred = false;
 
+    // Check where we ended up
+    // Simple sphere collision check against scene objects would be expensive
+    // We use a raycast in movement direction to predict collision
     if (isMoving) {
-        const tempCam = camera.clone();
-        tempCam.translateX(velocity.x);
-        tempCam.translateZ(velocity.z);
-        tempCam.translateY(velocity.y);
-        
-        const direction = new THREE.Vector3().subVectors(tempCam.position, camera.position).normalize();
-        
-        raycaster.current.set(camera.position, direction);
+        // Direction from previous position (estimated) or just forward ray
+        // Let's stick to the previous simple raycast: check forward from camera
+        const rayDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        raycaster.current.set(camera.position, rayDir);
         raycaster.current.far = 1.0; 
 
         const intersects = raycaster.current.intersectObjects(scene.children, true);
-        const validHits = intersects.filter(hit => hit.distance < 0.8);
+        const validHits = intersects.filter(hit => hit.distance < 0.6); // Increased distance slightly
 
         if (validHits.length > 0) {
             collisionOccurred = true;
         }
     }
 
-    if (!collisionOccurred) {
-        camera.translateX(velocity.x);
-        camera.translateZ(velocity.z);
-        camera.translateY(velocity.y);
-    }
-
+    // Room Boundaries (Hard Limits)
     let wallHit = false;
     if (camera.position.y < 0.2) { camera.position.y = 0.2; wallHit = true; }
     if (camera.position.y > 7.8) { camera.position.y = 7.8; wallHit = true; }
@@ -399,30 +415,42 @@ const PlayerController = () => {
     if (camera.position.z < -9.5) { camera.position.z = -9.5; wallHit = true; }
     if (camera.position.z > 9.5) { camera.position.z = 9.5; wallHit = true; }
 
+    // Collision Feedback
     if ((collisionOccurred || (wallHit && isMoving))) {
         const now = state.clock.elapsedTime;
         if (now - lastCollisionTime.current > collisionCooldown) {
             playCollisionSound();
             shakeIntensity.current = 0.8; 
             lastCollisionTime.current = now;
+            
+            // Push back slightly
+            camera.translateZ(0.2); 
         }
     }
 
     // --- Shake & Audio Dynamics ---
     if (shakeIntensity.current > 0.01) {
         const noise = (Math.random() - 0.5) * shakeIntensity.current * 0.2;
-        camera.rotation.z += noise;
+        
+        // CRITICAL FIX: Do not accumulate rotation on Z!
+        // Set Z rotation explicitly to the noise value, relative to 0.
+        camera.rotation.z = noise; 
+        
+        // Add position shake
         camera.position.x += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
         camera.position.y += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
+        
         shakeIntensity.current = THREE.MathUtils.lerp(shakeIntensity.current, 0, 0.1);
     } else {
-        camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, 0, 0.1);
+        // CRITICAL FIX: Ensure Z is strictly 0 when not shaking to prevent "flipping"
+        camera.rotation.z = 0;
     }
 
     if (!collisionOccurred) {
-        camera.position.y += Math.sin(state.clock.elapsedTime * 10) * 0.005;
+        camera.position.y += Math.sin(state.clock.elapsedTime * 10) * 0.005; // Hover effect
     }
 
+    // Audio Update
     if (oscillatorRef.current && gainNodeRef.current && audioCtxRef.current) {
         const ctx = audioCtxRef.current;
         const now = ctx.currentTime;
