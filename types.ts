@@ -50,6 +50,7 @@ export interface GameState {
   mobileInput: {
       move: { x: number, y: number }; // Joystick vector
       vertical: number; // -1 (down), 0, 1 (up)
+      turn: number; // -1 (left), 0, 1 (right)
   };
 
   // UI Feedback
@@ -81,6 +82,7 @@ export interface GameState {
   // Mobile Input Actions
   setMobileMove: (x: number, y: number) => void;
   setMobileVertical: (val: number) => void;
+  setMobileTurn: (val: number) => void;
 }
 
 // Fix for R3F types not being picked up in this environment

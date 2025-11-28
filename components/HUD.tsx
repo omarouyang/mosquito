@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useGameStore } from '../store';
 import { GamePhase, LevelType, EnemyType } from '../types';
 import { ENEMY_STATS } from '../constants';
-import { Play, RotateCcw, Thermometer, AlertTriangle, Clock, Ghost, Zap, MapPin, User, Utensils, Briefcase, Droplets, ChevronUp, ChevronDown, Maximize, Minimize, Smartphone } from 'lucide-react';
+import { Play, RotateCcw, Thermometer, AlertTriangle, Clock, Ghost, Zap, MapPin, User, Utensils, Briefcase, Droplets, ChevronUp, ChevronDown, Maximize, Minimize, Smartphone, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const Joystick = () => {
     const setMobileMove = useGameStore(state => state.setMobileMove);
@@ -55,12 +55,13 @@ const Joystick = () => {
     };
 
     // Touch events
-    const onTouchStart = (e: React.TouchEvent) => handleStart(e.touches[0].clientX, e.touches[0].clientY);
-    const onTouchMove = (e: React.TouchEvent) => handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    const onTouchStart = (e: React.TouchEvent) => { e.stopPropagation(); handleStart(e.touches[0].clientX, e.touches[0].clientY); };
+    const onTouchMove = (e: React.TouchEvent) => { e.stopPropagation(); handleMove(e.touches[0].clientX, e.touches[0].clientY); };
     
     // Mouse events for testing
-    const onMouseDown = (e: React.MouseEvent) => handleStart(e.clientX, e.clientY);
-    const onMouseMove = (e: React.MouseEvent) => handleMove(e.clientX, e.clientY);
+    const onMouseDown = (e: React.MouseEvent) => { e.stopPropagation(); handleStart(e.clientX, e.clientY); };
+    const onMouseMove = (e: React.MouseEvent) => { e.stopPropagation(); handleMove(e.clientX, e.clientY); };
+    const onMouseUp = (e: React.MouseEvent) => { e.stopPropagation(); handleEnd(); };
 
     return (
         <div 
@@ -71,7 +72,7 @@ const Joystick = () => {
             onTouchEnd={handleEnd}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
-            onMouseUp={handleEnd}
+            onMouseUp={onMouseUp}
             onMouseLeave={handleEnd}
         >
             <div 
@@ -88,20 +89,31 @@ const HUD = () => {
     phase, bloodLevel, alertLevel, detectionValue, timeLeft, gameOverReason, currentLevel,
     skillInvis, skillSpeed, decoyCount, decoyActive, decoyTimer, isSucking, lastActivatedSkill,
     startGame, resetGame, selectLevel, gyroEnabled, setGyroEnabled,
-    setSucking, activateSpeed, activateInvis, placeDecoy, setMobileVertical
+    setSucking, activateSpeed, activateInvis, placeDecoy, setMobileVertical, setMobileTurn
   } = useGameStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const isMobile = window.matchMedia("(pointer: coarse)").matches;
+  const isMobile = useRef(false);
+
+  useEffect(() => {
+    isMobile.current = window.matchMedia("(pointer: coarse)").matches;
+  }, []);
 
   // Helper: Request Fullscreen
   const toggleFullscreen = async () => {
       try {
-          if (!document.fullscreenElement) {
-              await document.documentElement.requestFullscreen();
+          const doc = document as any;
+          const el = document.documentElement as any;
+
+          const requestFullScreen = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+          const exitFullScreen = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+          const fullscreenElement = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+
+          if (!fullscreenElement) {
+              if (requestFullScreen) await requestFullScreen.call(el);
               setIsFullscreen(true);
           } else {
-              await document.exitFullscreen();
+              if (exitFullScreen) await exitFullScreen.call(doc);
               setIsFullscreen(false);
           }
       } catch (err) {
@@ -129,12 +141,14 @@ const HUD = () => {
   };
 
   const handleStartGame = async () => {
-      // Try fullscreen on start
-      if (!document.fullscreenElement && isMobile) {
+      if (!document.fullscreenElement && isMobile.current) {
           toggleFullscreen().catch(() => {}); 
       }
       startGame();
   };
+
+  // Stop propagation helper for buttons to avoid canvas clicks
+  const stopProp = (e: any) => e.stopPropagation();
 
   if (phase === GamePhase.MENU) {
     return (
@@ -180,18 +194,13 @@ const HUD = () => {
           </div>
 
           <div className="space-y-2 text-left bg-gray-800 p-4 rounded-lg mb-8 text-sm">
-            <h3 className="font-bold text-green-300 mb-2">技能與操作 ({isMobile ? '觸控' : '鍵盤'}):</h3>
+            <h3 className="font-bold text-green-300 mb-2">技能與操作:</h3>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">{isMobile ? '左搖桿' : 'W/A/S/D'}</span> 移動</div>
-              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">{isMobile ? '右側箭頭' : 'Space/Ctrl'}</span> 上升/下降</div>
-              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">{isMobile ? '滑動右螢幕' : '滑鼠'}</span> 轉動視角</div>
-              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">{isMobile ? '紅色按鈕' : '左鍵'}</span> 吸血</div>
+              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">左側搖桿</span> 移動</div>
+              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">右側箭頭</span> 上升/下降/轉向</div>
+              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">陀螺儀</span> 體感轉視角(可選)</div>
+              <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">紅色按鈕</span> 吸血</div>
             </div>
-            {isMobile && (
-                 <div className="mt-2 text-xs text-gray-400 text-center">
-                    提示：進入遊戲後可開啟陀螺儀(體感)操作
-                 </div>
-            )}
           </div>
 
           <button 
@@ -324,51 +333,82 @@ const HUD = () => {
           {/* Settings / Toggles */}
           <div className="flex gap-2">
               <button 
-                  onClick={toggleFullscreen}
+                  onClick={(e) => { stopProp(e); toggleFullscreen(); }}
+                  onTouchStart={stopProp}
                   className="p-2 bg-black/40 rounded-full border border-white/20 text-white"
               >
                   {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </button>
               <button 
-                  onClick={requestGyroPermission}
+                  onClick={(e) => { stopProp(e); requestGyroPermission(); }}
+                  onTouchStart={stopProp}
                   className={`p-2 rounded-full border text-white ${gyroEnabled ? 'bg-blue-500/50 border-blue-300' : 'bg-black/40 border-white/20'}`}
               >
                   <Smartphone size={20} />
               </button>
           </div>
 
-          {/* Vertical Controls */}
-          <div className="flex flex-col gap-2 mr-2">
-              <button 
-                className="p-3 bg-white/10 rounded-lg border-2 border-white/30 active:bg-white/30 backdrop-blur-md"
-                onTouchStart={() => setMobileVertical(1)}
-                onTouchEnd={() => setMobileVertical(0)}
-                onMouseDown={() => setMobileVertical(1)}
-                onMouseUp={() => setMobileVertical(0)}
-              >
-                  <ChevronUp className="text-white" size={24} />
-              </button>
-              <button 
-                className="p-3 bg-white/10 rounded-lg border-2 border-white/30 active:bg-white/30 backdrop-blur-md"
-                onTouchStart={() => setMobileVertical(-1)}
-                onTouchEnd={() => setMobileVertical(0)}
-                onMouseDown={() => setMobileVertical(-1)}
-                onMouseUp={() => setMobileVertical(0)}
-              >
-                  <ChevronDown className="text-white" size={24} />
-              </button>
+          {/* D-Pad Controls for Fly Up/Down/Left/Right */}
+          <div className="grid grid-cols-3 gap-1 mr-2 bg-black/20 p-2 rounded-xl backdrop-blur-sm">
+               {/* Top Row */}
+               <div className="col-start-2">
+                    <button 
+                        className="p-3 bg-white/10 rounded-lg border-2 border-white/30 active:bg-white/30"
+                        onTouchStart={(e) => { stopProp(e); setMobileVertical(1); }}
+                        onTouchEnd={(e) => { stopProp(e); setMobileVertical(0); }}
+                        onMouseDown={(e) => { stopProp(e); setMobileVertical(1); }}
+                        onMouseUp={(e) => { stopProp(e); setMobileVertical(0); }}
+                    >
+                        <ChevronUp className="text-white" size={24} />
+                    </button>
+               </div>
+               {/* Middle Row */}
+               <div className="col-start-1">
+                    <button 
+                        className="p-3 bg-white/10 rounded-lg border-2 border-white/30 active:bg-white/30"
+                        onTouchStart={(e) => { stopProp(e); setMobileTurn(1); }} // Left adds to rotation which is +Y
+                        onTouchEnd={(e) => { stopProp(e); setMobileTurn(0); }}
+                        onMouseDown={(e) => { stopProp(e); setMobileTurn(1); }}
+                        onMouseUp={(e) => { stopProp(e); setMobileTurn(0); }}
+                    >
+                        <ChevronLeft className="text-white" size={24} />
+                    </button>
+               </div>
+               <div className="col-start-3">
+                    <button 
+                        className="p-3 bg-white/10 rounded-lg border-2 border-white/30 active:bg-white/30"
+                        onTouchStart={(e) => { stopProp(e); setMobileTurn(-1); }} // Right subtracts from rotation
+                        onTouchEnd={(e) => { stopProp(e); setMobileTurn(0); }}
+                        onMouseDown={(e) => { stopProp(e); setMobileTurn(-1); }}
+                        onMouseUp={(e) => { stopProp(e); setMobileTurn(0); }}
+                    >
+                        <ChevronRight className="text-white" size={24} />
+                    </button>
+               </div>
+               {/* Bottom Row */}
+               <div className="col-start-2">
+                    <button 
+                        className="p-3 bg-white/10 rounded-lg border-2 border-white/30 active:bg-white/30"
+                        onTouchStart={(e) => { stopProp(e); setMobileVertical(-1); }}
+                        onTouchEnd={(e) => { stopProp(e); setMobileVertical(0); }}
+                        onMouseDown={(e) => { stopProp(e); setMobileVertical(-1); }}
+                        onMouseUp={(e) => { stopProp(e); setMobileVertical(0); }}
+                    >
+                        <ChevronDown className="text-white" size={24} />
+                    </button>
+               </div>
           </div>
 
-          <div className="flex gap-4 items-end">
+          <div className="flex gap-4 items-end mt-2">
               {/* Skills Row */}
               <div className="flex gap-2">
-                  <button onClick={activateSpeed} className={`p-3 rounded-full border-2 backdrop-blur-md ${skillSpeed.isActive ? 'bg-yellow-500/50 border-yellow-300' : 'bg-black/40 border-white/20'}`}>
+                  <button onClick={(e) => { stopProp(e); activateSpeed(); }} onTouchStart={stopProp} className={`p-3 rounded-full border-2 backdrop-blur-md ${skillSpeed.isActive ? 'bg-yellow-500/50 border-yellow-300' : 'bg-black/40 border-white/20'}`}>
                       <Zap className={skillSpeed.isActive ? 'text-yellow-100' : 'text-white'} size={20} />
                   </button>
-                  <button onClick={activateInvis} className={`p-3 rounded-full border-2 backdrop-blur-md ${skillInvis.isActive ? 'bg-purple-500/50 border-purple-300' : 'bg-black/40 border-white/20'}`}>
+                  <button onClick={(e) => { stopProp(e); activateInvis(); }} onTouchStart={stopProp} className={`p-3 rounded-full border-2 backdrop-blur-md ${skillInvis.isActive ? 'bg-purple-500/50 border-purple-300' : 'bg-black/40 border-white/20'}`}>
                       <Ghost className={skillInvis.isActive ? 'text-purple-100' : 'text-white'} size={20} />
                   </button>
-                  <button onClick={() => placeDecoy([0,0,0])} className={`p-3 rounded-full border-2 backdrop-blur-md ${decoyActive ? 'bg-green-500/50 border-green-300' : 'bg-black/40 border-white/20'}`}>
+                  <button onClick={(e) => { stopProp(e); placeDecoy([0,0,0]); }} onTouchStart={stopProp} className={`p-3 rounded-full border-2 backdrop-blur-md ${decoyActive ? 'bg-green-500/50 border-green-300' : 'bg-black/40 border-white/20'}`}>
                       <MapPin className={decoyActive ? 'text-green-100' : 'text-white'} size={20} />
                   </button>
               </div>
@@ -376,10 +416,10 @@ const HUD = () => {
               {/* Main Suck Button */}
               <button 
                 className={`w-20 h-20 rounded-full border-4 shadow-xl flex items-center justify-center transition-all ${isSucking ? 'bg-red-600 border-red-300 scale-95' : 'bg-red-500/80 border-red-400 active:scale-95'}`}
-                onTouchStart={() => setSucking(true)}
-                onTouchEnd={() => setSucking(false)}
-                onMouseDown={() => setSucking(true)}
-                onMouseUp={() => setSucking(false)}
+                onTouchStart={(e) => { stopProp(e); setSucking(true); }}
+                onTouchEnd={(e) => { stopProp(e); setSucking(false); }}
+                onMouseDown={(e) => { stopProp(e); setSucking(true); }}
+                onMouseUp={(e) => { stopProp(e); setSucking(false); }}
               >
                   <Thermometer className="text-white" size={32} />
               </button>

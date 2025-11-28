@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { GamePhase, GameState, LevelType, EnemyType } from './types';
 import { 
@@ -34,7 +35,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   mobileInput: {
       move: { x: 0, y: 0 },
-      vertical: 0
+      vertical: 0,
+      turn: 0
   },
 
   lastActivatedSkill: null,
@@ -61,7 +63,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     decoyCount: ITEM_DECOY_COUNT,
     decoyPosition: null,
     lastActivatedSkill: null,
-    mobileInput: { move: { x: 0, y: 0 }, vertical: 0 }
+    mobileInput: { move: { x: 0, y: 0 }, vertical: 0, turn: 0 }
   }),
 
   resetGame: () => set({
@@ -233,4 +235,5 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setMobileMove: (x, y) => set({ mobileInput: { ...get().mobileInput, move: { x, y } } }),
   setMobileVertical: (val) => set({ mobileInput: { ...get().mobileInput, vertical: val } }),
+  setMobileTurn: (val) => set({ mobileInput: { ...get().mobileInput, turn: val } }),
 }));
