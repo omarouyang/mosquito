@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { PointerLockControls } from '@react-three/drei';
+import { PointerLockControls, DeviceOrientationControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { MOVEMENT_SPEED, SKILL_SPEED_MULTIPLIER } from '../constants';
@@ -13,6 +13,7 @@ const PlayerController = () => {
   const placeDecoy = useGameStore((state) => state.placeDecoy);
   const activateSpeed = useGameStore((state) => state.activateSpeed);
   const skillSpeed = useGameStore((state) => state.skillSpeed);
+  const gyroEnabled = useGameStore((state) => state.gyroEnabled);
   
   const phase = useGameStore((state) => state.phase);
   
@@ -199,6 +200,9 @@ const PlayerController = () => {
     const domElement = gl.domElement;
 
     const onTouchStart = (e: TouchEvent) => {
+        // If Gyro is enabled, don't use swipe to look
+        if (gyroEnabled) return;
+
         // Find a touch that is NOT on the joystick (assuming joystick is on left, so we pick right side touches)
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
@@ -219,7 +223,7 @@ const PlayerController = () => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-        if (!touchLookRef.current.active) return;
+        if (!touchLookRef.current.active || gyroEnabled) return;
         
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
@@ -326,7 +330,7 @@ const PlayerController = () => {
           try { suckOscRef.current.stop(); } catch(e) {}
       }
     };
-  }, [setSucking, activateInvis, activateSpeed, placeDecoy, camera, phase, gl]);
+  }, [setSucking, activateInvis, activateSpeed, placeDecoy, camera, phase, gl, gyroEnabled]);
 
   // Movement & Audio Update Logic
   useFrame((state, delta) => {
@@ -358,11 +362,6 @@ const PlayerController = () => {
     // 2. Calculate Global Vertical Input (Up/Down)
     const globalInputY = (moveUp.current ? 1 : 0) - (moveDown.current ? 1 : 0) + mobileInput.vertical;
 
-    // Normalize combined intent if we were treating them equally, 
-    // but for 3D navigation separating vert is often better feeling.
-    // Let's normalize just the horizontal plane for movement speed consistency
-    // and handle vertical independently or combined.
-    
     const moveVector = new THREE.Vector3(localInputX, globalInputY, localInputZ);
     if (moveVector.lengthSq() > 1) {
         moveVector.normalize();
@@ -432,18 +431,22 @@ const PlayerController = () => {
     if (shakeIntensity.current > 0.01) {
         const noise = (Math.random() - 0.5) * shakeIntensity.current * 0.2;
         
-        // CRITICAL FIX: Do not accumulate rotation on Z!
-        // Set Z rotation explicitly to the noise value, relative to 0.
-        camera.rotation.z = noise; 
+        // Only apply rotational shake if Gyro is OFF. 
+        // If Gyro is ON, applying this rotation might conflict with device orientation updates or feel unnatural.
+        if (!gyroEnabled) {
+             camera.rotation.z = noise; 
+        }
         
-        // Add position shake
+        // Add position shake (safe for Gyro)
         camera.position.x += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
         camera.position.y += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
         
         shakeIntensity.current = THREE.MathUtils.lerp(shakeIntensity.current, 0, 0.1);
     } else {
-        // CRITICAL FIX: Ensure Z is strictly 0 when not shaking to prevent "flipping"
-        camera.rotation.z = 0;
+        // Ensure Z is strictly 0 when not shaking to prevent "flipping" (only if gyro is off)
+        if (!gyroEnabled) {
+            camera.rotation.z = 0;
+        }
     }
 
     if (!collisionOccurred) {
@@ -483,13 +486,20 @@ const PlayerController = () => {
     }
   });
 
-  // Keep PointerLock for desktop users if they click, but don't force it aggressively
   return (
-    <PointerLockControls 
-        selector="#root" 
-        minPolarAngle={0.1}
-        maxPolarAngle={Math.PI - 0.1}
-    />
+    <>
+        {/* Only use PointerLock if Gyro is OFF. */}
+        {!gyroEnabled && (
+            <PointerLockControls 
+                selector="#root" 
+                minPolarAngle={0.1}
+                maxPolarAngle={Math.PI - 0.1}
+            />
+        )}
+        
+        {/* Enable Gyro Controls if active */}
+        {gyroEnabled && <DeviceOrientationControls camera={camera} />}
+    </>
   );
 };
 

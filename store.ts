@@ -23,6 +23,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   isSucking: false,
   gameOverReason: null,
 
+  gyroEnabled: false,
+
   skillInvis: { isActive: false, cooldownTimer: 0, durationTimer: 0 },
   skillSpeed: { isActive: false, cooldownTimer: 0, durationTimer: 0 },
   decoyActive: false,
@@ -182,6 +184,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   triggerGameOver: (reason) => set({ phase: GamePhase.GAME_OVER, gameOverReason: reason }),
   triggerWin: () => set({ phase: GamePhase.WON }),
+
+  setGyroEnabled: (enabled) => set({ gyroEnabled: enabled }),
 
   activateInvis: () => {
       const { skillInvis } = get();

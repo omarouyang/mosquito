@@ -1,8 +1,9 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import { useGameStore } from '../store';
 import { GamePhase, LevelType, EnemyType } from '../types';
 import { ENEMY_STATS } from '../constants';
-import { Play, RotateCcw, Thermometer, AlertTriangle, Clock, Ghost, Zap, MapPin, User, Utensils, Briefcase, Droplets, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, RotateCcw, Thermometer, AlertTriangle, Clock, Ghost, Zap, MapPin, User, Utensils, Briefcase, Droplets, ChevronUp, ChevronDown, Maximize, Minimize, Smartphone } from 'lucide-react';
 
 const Joystick = () => {
     const setMobileMove = useGameStore(state => state.setMobileMove);
@@ -86,11 +87,54 @@ const HUD = () => {
   const { 
     phase, bloodLevel, alertLevel, detectionValue, timeLeft, gameOverReason, currentLevel,
     skillInvis, skillSpeed, decoyCount, decoyActive, decoyTimer, isSucking, lastActivatedSkill,
-    startGame, resetGame, selectLevel,
+    startGame, resetGame, selectLevel, gyroEnabled, setGyroEnabled,
     setSucking, activateSpeed, activateInvis, placeDecoy, setMobileVertical
   } = useGameStore();
 
-  const isMobile = window.matchMedia("(pointer: coarse)").matches; // Simple check
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
+
+  // Helper: Request Fullscreen
+  const toggleFullscreen = async () => {
+      try {
+          if (!document.fullscreenElement) {
+              await document.documentElement.requestFullscreen();
+              setIsFullscreen(true);
+          } else {
+              await document.exitFullscreen();
+              setIsFullscreen(false);
+          }
+      } catch (err) {
+          console.error("Fullscreen error:", err);
+      }
+  };
+
+  // Helper: Request Gyro Permissions (iOS)
+  const requestGyroPermission = async () => {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+          try {
+              const response = await (DeviceOrientationEvent as any).requestPermission();
+              if (response === 'granted') {
+                  setGyroEnabled(true);
+              } else {
+                  alert("未獲得陀螺儀權限");
+              }
+          } catch (e) {
+              console.error(e);
+          }
+      } else {
+          // Android or non-secure contexts usually don't need requestPermission
+          setGyroEnabled(!gyroEnabled);
+      }
+  };
+
+  const handleStartGame = async () => {
+      // Try fullscreen on start
+      if (!document.fullscreenElement && isMobile) {
+          toggleFullscreen().catch(() => {}); 
+      }
+      startGame();
+  };
 
   if (phase === GamePhase.MENU) {
     return (
@@ -143,10 +187,15 @@ const HUD = () => {
               <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">{isMobile ? '滑動右螢幕' : '滑鼠'}</span> 轉動視角</div>
               <div className="flex items-center gap-2"><span className="bg-gray-700 px-2 rounded">{isMobile ? '紅色按鈕' : '左鍵'}</span> 吸血</div>
             </div>
+            {isMobile && (
+                 <div className="mt-2 text-xs text-gray-400 text-center">
+                    提示：進入遊戲後可開啟陀螺儀(體感)操作
+                 </div>
+            )}
           </div>
 
           <button 
-            onClick={startGame}
+            onClick={handleStartGame}
             className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-8 rounded-xl transition-all transform hover:scale-105 active:scale-95"
           >
             <Play size={24} />
@@ -272,6 +321,22 @@ const HUD = () => {
       {/* Bottom Right: Action Buttons */}
       <div className="absolute bottom-8 right-8 flex flex-col gap-4 pointer-events-auto z-20 items-end">
           
+          {/* Settings / Toggles */}
+          <div className="flex gap-2">
+              <button 
+                  onClick={toggleFullscreen}
+                  className="p-2 bg-black/40 rounded-full border border-white/20 text-white"
+              >
+                  {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+              </button>
+              <button 
+                  onClick={requestGyroPermission}
+                  className={`p-2 rounded-full border text-white ${gyroEnabled ? 'bg-blue-500/50 border-blue-300' : 'bg-black/40 border-white/20'}`}
+              >
+                  <Smartphone size={20} />
+              </button>
+          </div>
+
           {/* Vertical Controls */}
           <div className="flex flex-col gap-2 mr-2">
               <button 

@@ -80,14 +80,18 @@ const Lamp = ({ position }: { position: [number, number, number] }) => (
         <Cone args={[0.6, 0.8, 32, 1, true]} position={[0, 3, 0]} material-color="#ffecb3">
              <pointLight color="#ffecb3" intensity={0.5} distance={5} decay={2} position={[0, -0.2, 0]} />
         </Cone>
-        <Sphere args={[0.15]} position={[0, 2.8, 0]} material-color="#ffffff" emissive="#ffffff" emissiveIntensity={1} />
+        <Sphere args={[0.15]} position={[0, 2.8, 0]}>
+            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={1} />
+        </Sphere>
     </group>
 );
 
 const CeilingLight = ({ position, color = "#ffffff" }: { position: [number, number, number], color?: string }) => (
     <group position={position}>
         <Cylinder args={[0.1, 0.1, 0.5]} position={[0, 0.25, 0]} material-color="#ccc" />
-        <Sphere args={[0.3]} position={[0, 0, 0]} material-color="white" emissive={color} emissiveIntensity={1} />
+        <Sphere args={[0.3]} position={[0, 0, 0]}>
+            <meshStandardMaterial color="white" emissive={color} emissiveIntensity={1} />
+        </Sphere>
         <pointLight position={[0, -0.5, 0]} intensity={0.8} color={color} distance={10} decay={2} castShadow />
     </group>
 );
@@ -229,9 +233,15 @@ const Kitchen = () => (
             <Sphere args={[0.3]} position={[0, 0.1, 0]} material-color="#ffab91" /> {/* Soup */}
             {/* Steam Particles */}
             <group position={[0, 0.8, 0]}>
-                 <Sphere args={[0.1]} position={[0, 0, 0]} material-color="white" opacity={0.5} transparent />
-                 <Sphere args={[0.15]} position={[0.1, 0.3, 0]} material-color="white" opacity={0.4} transparent />
-                 <Sphere args={[0.08]} position={[-0.1, 0.5, 0]} material-color="white" opacity={0.3} transparent />
+                 <Sphere args={[0.1]} position={[0, 0, 0]}>
+                    <meshStandardMaterial color="white" opacity={0.5} transparent />
+                 </Sphere>
+                 <Sphere args={[0.15]} position={[0.1, 0.3, 0]}>
+                    <meshStandardMaterial color="white" opacity={0.4} transparent />
+                 </Sphere>
+                 <Sphere args={[0.08]} position={[-0.1, 0.5, 0]}>
+                    <meshStandardMaterial color="white" opacity={0.3} transparent />
+                 </Sphere>
             </group>
          </group>
 
@@ -307,7 +317,9 @@ const Office = () => {
 
             {/* PC Tower */}
             <Box args={[0.6, 1.2, 1.2]} position={[-2.5, 0.6, 3.5]} rotation={[0, 0, 0]} material-color="#212121">
-                 <Box args={[0.05, 1, 0.05]} position={[0.3, 0, 0.5]} material-color="red" emissive="red" emissiveIntensity={2} />
+                 <Box args={[0.05, 1, 0.05]} position={[0.3, 0, 0.5]}>
+                    <meshStandardMaterial color="red" emissive="red" emissiveIntensity={2} />
+                 </Box>
             </Box>
 
             {/* Keyboard & Mouse */}
@@ -319,7 +331,9 @@ const Office = () => {
                 <Cylinder args={[0.15, 0.12, 0.25]} material-color="#ffffff" />
                 <Torus args={[0.08, 0.02, 8, 16]} position={[0.15, 0, 0]} material-color="#ffffff" />
                 {/* Steam (Static) */}
-                <Sphere args={[0.08]} position={[0, 0.3, 0]} material-color="#ccc" transparent opacity={0.3} />
+                <Sphere args={[0.08]} position={[0, 0.3, 0]}>
+                    <meshStandardMaterial color="#ccc" transparent opacity={0.3} />
+                </Sphere>
             </group>
           </group>
     
@@ -351,7 +365,9 @@ const Office = () => {
           {/* -- WATER COOLER -- */}
           <group position={[-9, -0.5, 5]}>
               <Box args={[1.5, 3, 1.5]} material-color="#eee" castShadow />
-              <Cylinder args={[0.6, 0.6, 1.5]} position={[0, 2.2, 0]} material-color="#4fc3f7" opacity={0.8} transparent />
+              <Cylinder args={[0.6, 0.6, 1.5]} position={[0, 2.2, 0]}>
+                  <meshStandardMaterial color="#4fc3f7" opacity={0.8} transparent />
+              </Cylinder>
               <Box args={[0.1, 0.2, 0.1]} position={[0, 0.5, 0.8]} material-color="blue" />
               <Box args={[0.1, 0.2, 0.1]} position={[0.3, 0.5, 0.8]} material-color="red" />
           </group>

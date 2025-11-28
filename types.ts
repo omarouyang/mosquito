@@ -1,3 +1,4 @@
+
 export enum GamePhase {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
@@ -34,6 +35,9 @@ export interface GameState {
   timeLeft: number;
   isSucking: boolean;
   
+  // Settings
+  gyroEnabled: boolean;
+
   // Skills & Items
   skillInvis: SkillState;
   skillSpeed: SkillState;
@@ -65,6 +69,9 @@ export interface GameState {
   setSucking: (isSucking: boolean) => void;
   triggerGameOver: (reason: 'time' | 'slapped' | 'detected') => void;
   triggerWin: () => void;
+  
+  // Settings Actions
+  setGyroEnabled: (enabled: boolean) => void;
   
   // Skill Actions
   activateInvis: () => void;
