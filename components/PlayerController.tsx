@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { PointerLockControls, DeviceOrientationControls } from '@react-three/drei';
+import { DeviceOrientationControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { MOVEMENT_SPEED, SKILL_SPEED_MULTIPLIER } from '../constants';
@@ -24,6 +24,9 @@ const PlayerController = () => {
   const moveUp = useRef(false);
   const moveDown = useRef(false);
 
+  // Manual Camera Control State (Euler YXZ prevents gimbal lock)
+  const lookEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+
   // --- Collision & Feedback Refs ---
   const raycaster = useRef(new THREE.Raycaster());
   const lastCollisionTime = useRef(0);
@@ -45,13 +48,14 @@ const PlayerController = () => {
       lastY: 0, 
       id: -1 
   });
-  const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
 
   // Initialize Audio & Camera Setup
   useEffect(() => {
-    // Force camera order and up vector to prevent gimbal lock or flipping
+    // Force camera order and up vector
     camera.rotation.order = 'YXZ';
     camera.up.set(0, 1, 0);
+    lookEuler.current.setFromQuaternion(camera.quaternion);
+    lookEuler.current.reorder('YXZ');
 
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -62,27 +66,16 @@ const PlayerController = () => {
 
       const mainOsc = ctx.createOscillator();
       const gainNode = ctx.createGain();
-      const lfoOsc = ctx.createOscillator(); 
-      const lfoGain = ctx.createGain();
 
       mainOsc.type = 'sawtooth'; 
       mainOsc.frequency.value = 450; 
 
-      lfoOsc.type = 'sine';
-      lfoOsc.frequency.value = 25; 
-      lfoGain.gain.value = 15; 
-
-      lfoOsc.connect(lfoGain);
-      lfoGain.connect(mainOsc.frequency);
-
       mainOsc.connect(gainNode);
       gainNode.connect(ctx.destination);
-
-      gainNode.gain.value = 0.02; 
+      gainNode.gain.value = 0; // Start silent
 
       mainOsc.start();
-      lfoOsc.start();
-
+      
       oscillatorRef.current = mainOsc;
       gainNodeRef.current = gainNode;
 
@@ -96,6 +89,24 @@ const PlayerController = () => {
       }
     };
   }, [camera]);
+
+  // Sync back when gyro is disabled to prevent jumps
+  useEffect(() => {
+    if (!gyroEnabled) {
+        lookEuler.current.setFromQuaternion(camera.quaternion);
+        lookEuler.current.z = 0; // Flatten roll
+        lookEuler.current.reorder('YXZ');
+    }
+  }, [gyroEnabled, camera]);
+
+  // Unlock cursor on Game Over
+  useEffect(() => {
+    if (phase !== 'PLAYING') {
+       if (document.pointerLockElement === gl.domElement) {
+           document.exitPointerLock();
+       }
+    }
+  }, [phase, gl]);
 
   const playCollisionSound = () => {
     const ctx = audioCtxRef.current;
@@ -195,78 +206,41 @@ const PlayerController = () => {
       }
   };
 
+  // Setup Controls (Mouse & Keyboard)
   useEffect(() => {
-    // Touch Events for Camera Look
-    const domElement = gl.domElement;
+    const onMouseMove = (e: MouseEvent) => {
+        if (gyroEnabled || phase !== 'PLAYING') return;
+        if (document.pointerLockElement !== gl.domElement) return;
 
-    const onTouchStart = (e: TouchEvent) => {
-        // If Gyro is enabled, don't use swipe to look
-        if (gyroEnabled) return;
+        const sensitivity = 0.002;
+        lookEuler.current.y -= e.movementX * sensitivity;
+        lookEuler.current.x -= e.movementY * sensitivity;
 
-        // Find a touch that is NOT on the joystick (assuming joystick is on left, so we pick right side touches)
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            const t = e.changedTouches[i];
-            // Simple heuristic: if touch is on right 2/3 of screen, it's for looking
-            if (t.clientX > window.innerWidth / 3) {
-                touchLookRef.current.active = true;
-                touchLookRef.current.lastX = t.clientX;
-                touchLookRef.current.lastY = t.clientY;
-                touchLookRef.current.id = t.identifier;
-                
-                // Unlock Audio Context on first interaction
-                if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-                    audioCtxRef.current.resume();
-                }
-                break;
+        // Clamp Pitch (Prevent flipping over)
+        lookEuler.current.x = Math.max(0.1, Math.min(Math.PI - 0.1, lookEuler.current.x));
+        // Force Roll to 0 (Prevent tilting)
+        lookEuler.current.z = 0;
+    };
+
+    const onMouseDown = () => {
+        if (phase === 'PLAYING') {
+            // Request lock if clicking on canvas and not using gyro
+            if (!gyroEnabled && document.pointerLockElement !== gl.domElement) {
+                gl.domElement.requestPointerLock();
             }
+            setSucking(true);
+            playSuckSound('start');
         }
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-        if (!touchLookRef.current.active || gyroEnabled) return;
-        
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            const t = e.changedTouches[i];
-            if (t.identifier === touchLookRef.current.id) {
-                const deltaX = t.clientX - touchLookRef.current.lastX;
-                const deltaY = t.clientY - touchLookRef.current.lastY;
-                
-                touchLookRef.current.lastX = t.clientX;
-                touchLookRef.current.lastY = t.clientY;
-
-                // Sync euler with current camera rotation first (crucial if PointerLock was also used)
-                euler.current.setFromQuaternion(camera.quaternion);
-
-                const sensitivity = 0.005;
-                euler.current.y -= deltaX * sensitivity;
-                euler.current.x -= deltaY * sensitivity;
-
-                // Clamp Pitch
-                euler.current.x = Math.max(0.1, Math.min(Math.PI - 0.1, euler.current.x));
-                // Clamp Roll explicitly to 0
-                euler.current.z = 0;
-
-                camera.quaternion.setFromEuler(euler.current);
-                break;
-            }
-        }
+    const onMouseUp = () => {
+        setSucking(false);
+        playSuckSound('end');
     };
-
-    const onTouchEnd = (e: TouchEvent) => {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === touchLookRef.current.id) {
-                touchLookRef.current.active = false;
-                break;
-            }
-        }
-    };
-
-    domElement.addEventListener('touchstart', onTouchStart, { passive: false });
-    domElement.addEventListener('touchmove', onTouchMove, { passive: false });
-    domElement.addEventListener('touchend', onTouchEnd);
 
     // Keyboard Events
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (phase !== 'PLAYING') return;
       switch (event.code) {
         case 'ArrowUp':
         case 'KeyW': moveForward.current = true; break;
@@ -301,36 +275,91 @@ const PlayerController = () => {
       }
     };
 
-    const handleMouseDown = () => {
-        if (phase === 'PLAYING') {
-            setSucking(true);
-            playSuckSound('start');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mousedown', onMouseDown);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('keyup', handleKeyUp);
+        if (suckOscRef.current) {
+            try { suckOscRef.current.stop(); } catch(e) {}
+        }
+    };
+  }, [setSucking, activateInvis, activateSpeed, placeDecoy, camera, phase, gl, gyroEnabled]);
+
+  // Touch Logic
+  useEffect(() => {
+    const domElement = gl.domElement;
+
+    const onTouchStart = (e: TouchEvent) => {
+        if (gyroEnabled) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            // Right side of screen for look
+            if (t.clientX > window.innerWidth / 2) {
+                touchLookRef.current.active = true;
+                touchLookRef.current.lastX = t.clientX;
+                touchLookRef.current.lastY = t.clientY;
+                touchLookRef.current.id = t.identifier;
+                
+                if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                    audioCtxRef.current.resume();
+                }
+                break;
+            }
         }
     };
 
-    const handleMouseUp = () => {
-        setSucking(false);
-        playSuckSound('end');
+    const onTouchMove = (e: TouchEvent) => {
+        if (!touchLookRef.current.active || gyroEnabled) return;
+        
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (t.identifier === touchLookRef.current.id) {
+                const deltaX = t.clientX - touchLookRef.current.lastX;
+                const deltaY = t.clientY - touchLookRef.current.lastY;
+                
+                touchLookRef.current.lastX = t.clientX;
+                touchLookRef.current.lastY = t.clientY;
+
+                const sensitivity = 0.005;
+                lookEuler.current.y -= deltaX * sensitivity;
+                lookEuler.current.x -= deltaY * sensitivity;
+
+                // Clamp Pitch
+                lookEuler.current.x = Math.max(0.1, Math.min(Math.PI - 0.1, lookEuler.current.x));
+                // Force Roll 0
+                lookEuler.current.z = 0;
+                break;
+            }
+        }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mouseup', handleMouseUp);
+    const onTouchEnd = (e: TouchEvent) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchLookRef.current.id) {
+                touchLookRef.current.active = false;
+                break;
+            }
+        }
+    };
+
+    domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    domElement.addEventListener('touchend', onTouchEnd);
 
     return () => {
       domElement.removeEventListener('touchstart', onTouchStart);
       domElement.removeEventListener('touchmove', onTouchMove);
       domElement.removeEventListener('touchend', onTouchEnd);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('keyup', handleKeyUp);
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('mouseup', handleMouseUp);
-      if (suckOscRef.current) {
-          try { suckOscRef.current.stop(); } catch(e) {}
-      }
     };
-  }, [setSucking, activateInvis, activateSpeed, placeDecoy, camera, phase, gl, gyroEnabled]);
+  }, [gl, gyroEnabled]);
 
   // Movement & Audio Update Logic
   useFrame((state, delta) => {
@@ -351,33 +380,21 @@ const PlayerController = () => {
     }
 
     // --- Input Vectors ---
-    // Calculate movement vector
-    // X and Z are local to camera (Forward/Strafe)
-    // Y is Global (Up/Down) for better Mosquito hovering control
-    
-    // 1. Calculate Local Horizontal Plane Input (Forward/Strafe)
     const localInputX = (moveRight.current ? 1 : 0) - (moveLeft.current ? 1 : 0) + mobileInput.move.x;
     const localInputZ = (moveBackward.current ? 1 : 0) - (moveForward.current ? 1 : 0) + mobileInput.move.y;
-    
-    // 2. Calculate Global Vertical Input (Up/Down)
     const globalInputY = (moveUp.current ? 1 : 0) - (moveDown.current ? 1 : 0) + mobileInput.vertical;
 
     const moveVector = new THREE.Vector3(localInputX, globalInputY, localInputZ);
     if (moveVector.lengthSq() > 1) {
         moveVector.normalize();
     }
-    
-    // Scale by speed
     moveVector.multiplyScalar(currentSpeed * delta);
 
-    // Apply Local Horizontal Movement
+    // Apply Movement
     if (moveVector.x !== 0 || moveVector.z !== 0) {
-        // We want to move Forward/Right relative to camera view
         camera.translateX(moveVector.x);
         camera.translateZ(moveVector.z);
     }
-    
-    // Apply Global Vertical Movement
     if (moveVector.y !== 0) {
         camera.position.y += moveVector.y;
     }
@@ -386,26 +403,20 @@ const PlayerController = () => {
 
     // --- Collision Detection ---
     let collisionOccurred = false;
-
-    // Check where we ended up
-    // Simple sphere collision check against scene objects would be expensive
-    // We use a raycast in movement direction to predict collision
     if (isMoving) {
-        // Direction from previous position (estimated) or just forward ray
-        // Let's stick to the previous simple raycast: check forward from camera
         const rayDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
         raycaster.current.set(camera.position, rayDir);
         raycaster.current.far = 1.0; 
 
         const intersects = raycaster.current.intersectObjects(scene.children, true);
-        const validHits = intersects.filter(hit => hit.distance < 0.6); // Increased distance slightly
+        const validHits = intersects.filter(hit => hit.distance < 0.6); 
 
         if (validHits.length > 0) {
             collisionOccurred = true;
         }
     }
 
-    // Room Boundaries (Hard Limits)
+    // Room Boundaries
     let wallHit = false;
     if (camera.position.y < 0.2) { camera.position.y = 0.2; wallHit = true; }
     if (camera.position.y > 7.8) { camera.position.y = 7.8; wallHit = true; }
@@ -421,61 +432,50 @@ const PlayerController = () => {
             playCollisionSound();
             shakeIntensity.current = 0.8; 
             lastCollisionTime.current = now;
-            
-            // Push back slightly
             camera.translateZ(0.2); 
         }
     }
 
-    // --- Shake & Audio Dynamics ---
-    if (shakeIntensity.current > 0.01) {
-        const noise = (Math.random() - 0.5) * shakeIntensity.current * 0.2;
-        
-        // Only apply rotational shake if Gyro is OFF. 
-        // If Gyro is ON, applying this rotation might conflict with device orientation updates or feel unnatural.
-        if (!gyroEnabled) {
-             camera.rotation.z = noise; 
+    // --- Camera Rotation & Shake ---
+    if (!gyroEnabled) {
+        // Apply controlled look direction
+        camera.rotation.copy(lookEuler.current);
+
+        // Apply additive shake (temporary Z rotation)
+        if (shakeIntensity.current > 0.01) {
+            const noise = (Math.random() - 0.5) * shakeIntensity.current * 0.2;
+            camera.rotation.z += noise; 
+            
+            camera.position.x += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
+            camera.position.y += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
+            
+            shakeIntensity.current = THREE.MathUtils.lerp(shakeIntensity.current, 0, 0.1);
         }
-        
-        // Add position shake (safe for Gyro)
-        camera.position.x += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
-        camera.position.y += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
-        
-        shakeIntensity.current = THREE.MathUtils.lerp(shakeIntensity.current, 0, 0.1);
     } else {
-        // Ensure Z is strictly 0 when not shaking to prevent "flipping" (only if gyro is off)
-        if (!gyroEnabled) {
-            camera.rotation.z = 0;
+        // Gyro Mode: Just apply position shake
+        if (shakeIntensity.current > 0.01) {
+            camera.position.x += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
+            camera.position.y += (Math.random() - 0.5) * shakeIntensity.current * 0.05;
+            shakeIntensity.current = THREE.MathUtils.lerp(shakeIntensity.current, 0, 0.1);
         }
     }
 
     if (!collisionOccurred) {
-        camera.position.y += Math.sin(state.clock.elapsedTime * 10) * 0.005; // Hover effect
+        camera.position.y += Math.sin(state.clock.elapsedTime * 10) * 0.005; // Hover
     }
 
     // Audio Update
     if (oscillatorRef.current && gainNodeRef.current && audioCtxRef.current) {
         const ctx = audioCtxRef.current;
         const now = ctx.currentTime;
-
         let targetFreq = 380;
         let targetVol = 0.015;
 
-        if (isMoving) {
-            targetFreq = 580; 
-            targetVol = 0.1;
-        }
-
+        if (isMoving) { targetFreq = 580; targetVol = 0.1; }
         if (skillSpeed.isActive) {
-            if (isMoving) {
-                targetFreq = 850; 
-                targetVol = 0.3; 
-            } else {
-                targetFreq = 450;
-                targetVol = 0.03;
-            }
+            targetFreq = isMoving ? 850 : 450;
+            targetVol = isMoving ? 0.3 : 0.03;
         }
-        
         if (collisionOccurred || (wallHit && isMoving)) {
              targetFreq = 150 + Math.random() * 100;
              targetVol = 0.05;
@@ -488,16 +488,7 @@ const PlayerController = () => {
 
   return (
     <>
-        {/* Only use PointerLock if Gyro is OFF. */}
-        {!gyroEnabled && (
-            <PointerLockControls 
-                selector="#root" 
-                minPolarAngle={0.1}
-                maxPolarAngle={Math.PI - 0.1}
-            />
-        )}
-        
-        {/* Enable Gyro Controls if active */}
+        {/* Gyro Control */}
         {gyroEnabled && <DeviceOrientationControls camera={camera} />}
     </>
   );
