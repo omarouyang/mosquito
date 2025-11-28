@@ -1,0 +1,5 @@
+{
+  "name": "3D 蚊子模擬器 (Mosquito Sim)",
+  "description": "扮演一隻蚊子，在房間內飛行並尋找目標吸血。小心別被人類發現！",
+  "requestFramePermissions": []
+}
