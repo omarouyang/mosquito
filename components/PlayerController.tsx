@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { DeviceOrientationControls } from '@react-three/drei';
@@ -223,18 +222,19 @@ const PlayerController = () => {
     };
 
     const onMouseDown = (e: MouseEvent) => {
-        if (phase === 'PLAYING') {
-            // Request lock only if clicking on canvas and NOT touching/mobile interaction
-            // This prevents "exited lock" errors on mobile or when clicking HUD buttons
-            const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-            if (!gyroEnabled && !isTouch && document.pointerLockElement !== gl.domElement) {
-                // Use catch to silently fail if lock is denied/interrupted
-                // Cast to any because TS might define requestPointerLock as returning void
-                (gl.domElement.requestPointerLock() as any)?.catch?.(() => {});
-            }
-            setSucking(true);
-            playSuckSound('start');
+        // IMPORTANT: Only request lock if clicking the Canvas (game world).
+        // If clicking HUD buttons, e.target will be the button, so we skip this.
+        if (phase !== 'PLAYING' || e.target !== gl.domElement) return;
+
+        // Determine if this is likely a touch device interaction trying to emulate mouse
+        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        if (!gyroEnabled && !isTouch && document.pointerLockElement !== gl.domElement) {
+            // Use catch to silently fail if lock is denied/interrupted (common on mobile or rapid clicks)
+            (gl.domElement.requestPointerLock() as any)?.catch?.(() => {});
         }
+        setSucking(true);
+        playSuckSound('start');
     };
 
     const onMouseUp = () => {
@@ -303,16 +303,10 @@ const PlayerController = () => {
 
     const onTouchStart = (e: TouchEvent) => {
         if (gyroEnabled) return;
-        // Check if any touch started in the "Look Zone" (right half of screen, but ignore if HUD buttons are there)
-        // Since we are adding manual turn buttons, we might want to Disable touch-swipe-look if buttons are preferred?
-        // User asked to REPLACE gyro with buttons, but didn't explicitly say replace swipe.
-        // However, swipe is usually better than buttons for looking. 
-        // I will keep swipe for fine aiming, buttons for turning.
         
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
-            // Only capture touches that aren't on buttons (handled by stopPropagation in HUD)
-            // But if the touch started on canvas, it's fair game.
+            // Only capture touches for looking if they are on the right half of the screen
             if (t.clientX > window.innerWidth / 2) {
                 touchLookRef.current.active = true;
                 touchLookRef.current.lastX = t.clientX;
@@ -328,6 +322,9 @@ const PlayerController = () => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+        // Prevent default to stop scrolling/pull-to-refresh on mobile
+        if (e.cancelable) e.preventDefault();
+        
         if (!touchLookRef.current.active || gyroEnabled) return;
         
         for (let i = 0; i < e.changedTouches.length; i++) {
@@ -361,6 +358,7 @@ const PlayerController = () => {
         }
     };
 
+    // Use passive: false to allow preventDefault
     domElement.addEventListener('touchstart', onTouchStart, { passive: false });
     domElement.addEventListener('touchmove', onTouchMove, { passive: false });
     domElement.addEventListener('touchend', onTouchEnd);

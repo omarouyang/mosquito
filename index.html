@@ -14,6 +14,9 @@
         font-family: 'Noto Sans TC', sans-serif;
         overflow: hidden;
         user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
         background-color: #1a1a1a;
         overscroll-behavior: none;
         touch-action: none; /* Critical for mobile game controls */
@@ -50,16 +53,16 @@
   <script type="importmap">
 {
   "imports": {
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "@react-three/fiber": "https://aistudiocdn.com/@react-three/fiber@^9.4.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "zustand": "https://aistudiocdn.com/zustand@^5.0.8",
-    "@react-three/fiber": "https://aistudiocdn.com/@react-three/fiber@^9.4.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
     "@react-three/drei": "https://aistudiocdn.com/@react-three/drei@^10.7.7",
     "three": "https://aistudiocdn.com/three@^0.181.2",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
+    "zustand": "https://aistudiocdn.com/zustand@^5.0.8"
   }
 }
 </script>

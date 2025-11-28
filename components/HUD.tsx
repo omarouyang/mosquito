@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { useGameStore } from '../store';
 import { GamePhase, LevelType, EnemyType } from '../types';
@@ -93,10 +92,17 @@ const HUD = () => {
   } = useGameStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [supportsFullscreen, setSupportsFullscreen] = useState(false);
   const isMobile = useRef(false);
 
   useEffect(() => {
     isMobile.current = window.matchMedia("(pointer: coarse)").matches;
+    
+    // Check if fullscreen API is available (iOS often doesn't have it for divs)
+    const doc = document as any;
+    const el = document.documentElement as any;
+    const hasApi = !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
+    setSupportsFullscreen(hasApi);
   }, []);
 
   // Helper: Request Fullscreen
@@ -141,7 +147,7 @@ const HUD = () => {
   };
 
   const handleStartGame = async () => {
-      if (!document.fullscreenElement && isMobile.current) {
+      if (supportsFullscreen && !document.fullscreenElement && isMobile.current) {
           toggleFullscreen().catch(() => {}); 
       }
       startGame();
@@ -332,13 +338,15 @@ const HUD = () => {
           
           {/* Settings / Toggles */}
           <div className="flex gap-2">
-              <button 
-                  onClick={(e) => { stopProp(e); toggleFullscreen(); }}
-                  onTouchStart={stopProp}
-                  className="p-2 bg-black/40 rounded-full border border-white/20 text-white"
-              >
-                  {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-              </button>
+              {supportsFullscreen && (
+                  <button 
+                      onClick={(e) => { stopProp(e); toggleFullscreen(); }}
+                      onTouchStart={stopProp}
+                      className="p-2 bg-black/40 rounded-full border border-white/20 text-white"
+                  >
+                      {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                  </button>
+              )}
               <button 
                   onClick={(e) => { stopProp(e); requestGyroPermission(); }}
                   onTouchStart={stopProp}
